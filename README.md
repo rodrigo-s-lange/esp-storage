@@ -32,6 +32,7 @@ For this design, serializer is **not required**:
 ## Prerequisites
 
 - `nvs_flash_init()` called before `esp_storage_init()`.
+- `esp_at_init()` called before `esp_storage_init()` (AT commands are registered in init).
 - Partition table containing a LittleFS partition labeled `storage`.
 
 ## Usage
@@ -59,6 +60,28 @@ ESP_ERROR_CHECK(esp_storage_lfs_write_json(10, "{\"setpoint\":25,\"mode\":\"auto
 ```
 
 See `EXAMPLES.md` for more complete usage snippets.
+
+## AT commands (simplified read/write)
+
+`esp_storage_init()` registers these commands:
+
+- `AT+NVSI=<slot>` -> read NVS int slot
+- `AT+NVSI=<slot>,<int64>` -> write NVS int slot
+- `AT+NVSS=<slot>` -> read NVS string slot
+- `AT+NVSS=<slot>,<text>` -> write NVS string slot
+- `AT+LFS=<slot>` -> read LittleFS text slot
+- `AT+LFS=<slot>,<text_or_json>` -> write LittleFS text slot
+
+Examples:
+
+```text
+AT+NVSI=1,25
+AT+NVSI=1
+AT+NVSS=2,string_exemplo
+AT+NVSS=2
+AT+LFS=10,{"mode":"auto","setpoint":25}
+AT+LFS=10
+```
 
 ## Install
 

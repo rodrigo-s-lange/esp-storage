@@ -65,7 +65,20 @@ ESP_ERROR_CHECK(esp_storage_lfs_erase(20));
 ## Notes
 
 - Valid slot range is `0..255`.
+- `esp_at_init()` must be called before `esp_storage_init()`.
 - Serializer is not required at storage layer:
   - NVS stores typed int/string data.
   - LittleFS stores raw bytes directly.
 
+## 7) Same operations via AT
+
+```text
+AT+NVSI=1,25
+AT+NVSI=1
+
+AT+NVSS=2,string_exemplo
+AT+NVSS=2
+
+AT+LFS=10,{"key":"value"}
+AT+LFS=10
+```

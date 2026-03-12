@@ -18,5 +18,7 @@ targets:
 dependencies:
   idf:
     version: ">=5.0.0"
+  # rodrigo-s-lange/esp_at:
+  #   version: ">=0.1.0"
   joltwallet/littlefs:
     version: ">=1.20.1"
