@@ -118,10 +118,12 @@ static esp_err_t _parse_slot_and_value(const char *param,
         }
     }
 
+    char *slot_str = _trim_ws(p);
+
     errno = 0;
     char *end = NULL;
-    long slot_l = strtol(p, &end, 10);
-    if (errno != 0 || end == p || *end != '\0' || slot_l < 0 || slot_l > STORAGE_SLOT_MAX) {
+    long slot_l = strtol(slot_str, &end, 10);
+    if (errno != 0 || end == slot_str || *end != '\0' || slot_l < 0 || slot_l > STORAGE_SLOT_MAX) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -207,12 +209,8 @@ static void _at_handle_nvss(const char *param)
 
     size_t need = 0;
     err = esp_storage_nvs_get_string(slot, NULL, 0, &need);
-    if (err != ESP_OK && err != ESP_ERR_INVALID_ARG) {
-        _at_report_storage_err("nvs get string size", err);
-        return;
-    }
-    if (need == 0) {
-        _at_report_storage_err("nvs get string", ESP_ERR_NOT_FOUND);
+    if (err != ESP_OK) {
+        _at_report_storage_err("nvs get string", err);
         return;
     }
 
@@ -256,23 +254,27 @@ static void _at_handle_lfs(const char *param)
     }
 
     size_t need = 0;
-    err = esp_storage_lfs_get_size(slot, &need);
+    err = esp_storage_lfs_read_string(slot, NULL, 0, &need);
     if (err != ESP_OK) {
-        _at_report_storage_err("lfs get size", err);
+        _at_report_storage_err("lfs read", err);
         return;
     }
-    if (need > STORAGE_AT_MAX_READ_LEN) {
+    if (need == 0) {
+        _at_report_storage_err("lfs read", ESP_FAIL);
+        return;
+    }
+    if ((need - 1U) > STORAGE_AT_MAX_READ_LEN) {
         AT(Y "LFS[%u] muito grande (%u bytes). Limite AT=%u",
-           (unsigned)slot, (unsigned)need, (unsigned)STORAGE_AT_MAX_READ_LEN);
+           (unsigned)slot, (unsigned)(need - 1U), (unsigned)STORAGE_AT_MAX_READ_LEN);
         return;
     }
 
-    char *buf = calloc(1, need + 1U);
+    char *buf = calloc(1, need);
     if (buf == NULL) {
         _at_report_storage_err("alloc", ESP_ERR_NO_MEM);
         return;
     }
-    err = esp_storage_lfs_read_string(slot, buf, need + 1U, NULL);
+    err = esp_storage_lfs_read_string(slot, buf, need, NULL);
     if (err != ESP_OK) {
         free(buf);
         _at_report_storage_err("lfs read", err);
@@ -632,15 +634,11 @@ esp_err_t esp_storage_lfs_get_size(uint16_t slot, size_t *out_size)
 
 esp_err_t esp_storage_lfs_read(uint16_t slot, void *out, size_t out_len, size_t *req_len)
 {
-    if (!_slot_valid(slot) || out == NULL) return ESP_ERR_INVALID_ARG;
+    if (!_slot_valid(slot)) return ESP_ERR_INVALID_ARG;
+    if (out == NULL && req_len == NULL) return ESP_ERR_INVALID_ARG;
+    if (out != NULL && out_len == 0) return ESP_ERR_INVALID_ARG;
     esp_err_t ready = _check_ready();
     if (ready != ESP_OK) return ready;
-
-    size_t need = 0;
-    esp_err_t err = esp_storage_lfs_get_size(slot, &need);
-    if (req_len != NULL) *req_len = need;
-    if (err != ESP_OK) return err;
-    if (out_len < need) return ESP_ERR_INVALID_SIZE;
 
     char path[48];
     _lfs_make_path(slot, path, sizeof(path));
@@ -649,9 +647,38 @@ esp_err_t esp_storage_lfs_read(uint16_t slot, void *out, size_t out_len, size_t 
     FILE *f = fopen(path, "rb");
     if (f == NULL) {
         xSemaphoreGive(s_state.lock);
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (fseek(f, 0L, SEEK_END) != 0) {
+        fclose(f);
+        xSemaphoreGive(s_state.lock);
+        return ESP_FAIL;
+    }
+    long end = ftell(f);
+    if (end < 0) {
+        fclose(f);
+        xSemaphoreGive(s_state.lock);
+        return ESP_FAIL;
+    }
+    if (fseek(f, 0L, SEEK_SET) != 0) {
+        fclose(f);
+        xSemaphoreGive(s_state.lock);
         return ESP_FAIL;
     }
 
+    size_t need = (size_t)end;
+    if (req_len != NULL) *req_len = need;
+    if (out == NULL) {
+        fclose(f);
+        xSemaphoreGive(s_state.lock);
+        return ESP_OK;
+    }
+    if (out_len < need) {
+        fclose(f);
+        xSemaphoreGive(s_state.lock);
+        return ESP_ERR_INVALID_SIZE;
+    }
     if (need > 0 && fread(out, 1, need, f) != need) {
         fclose(f);
         xSemaphoreGive(s_state.lock);
@@ -687,19 +714,61 @@ esp_err_t esp_storage_lfs_write_string(uint16_t slot, const char *text)
 
 esp_err_t esp_storage_lfs_read_string(uint16_t slot, char *out, size_t out_len, size_t *req_len)
 {
-    if (out == NULL || out_len == 0) return ESP_ERR_INVALID_ARG;
+    if (!_slot_valid(slot)) return ESP_ERR_INVALID_ARG;
+    if (out == NULL && req_len == NULL) return ESP_ERR_INVALID_ARG;
+    if (out != NULL && out_len == 0) return ESP_ERR_INVALID_ARG;
+    esp_err_t ready = _check_ready();
+    if (ready != ESP_OK) return ready;
 
-    size_t need = 0;
-    esp_err_t err = esp_storage_lfs_get_size(slot, &need);
-    if (req_len != NULL) {
-        *req_len = need + 1U;
+    char path[48];
+    _lfs_make_path(slot, path, sizeof(path));
+
+    xSemaphoreTake(s_state.lock, portMAX_DELAY);
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) {
+        xSemaphoreGive(s_state.lock);
+        return ESP_ERR_NOT_FOUND;
     }
-    if (err != ESP_OK) return err;
-    if (out_len < (need + 1U)) return ESP_ERR_INVALID_SIZE;
 
-    err = esp_storage_lfs_read(slot, out, need, NULL);
-    if (err != ESP_OK) return err;
-    out[need] = '\0';
+    if (fseek(f, 0L, SEEK_END) != 0) {
+        fclose(f);
+        xSemaphoreGive(s_state.lock);
+        return ESP_FAIL;
+    }
+    long end = ftell(f);
+    if (end < 0) {
+        fclose(f);
+        xSemaphoreGive(s_state.lock);
+        return ESP_FAIL;
+    }
+    if (fseek(f, 0L, SEEK_SET) != 0) {
+        fclose(f);
+        xSemaphoreGive(s_state.lock);
+        return ESP_FAIL;
+    }
+
+    size_t payload_len = (size_t)end;
+    size_t need = payload_len + 1U;
+    if (req_len != NULL) *req_len = need;
+    if (out == NULL) {
+        fclose(f);
+        xSemaphoreGive(s_state.lock);
+        return ESP_OK;
+    }
+    if (out_len < need) {
+        fclose(f);
+        xSemaphoreGive(s_state.lock);
+        return ESP_ERR_INVALID_SIZE;
+    }
+    if (payload_len > 0 && fread(out, 1, payload_len, f) != payload_len) {
+        fclose(f);
+        xSemaphoreGive(s_state.lock);
+        return ESP_FAIL;
+    }
+    out[payload_len] = '\0';
+
+    fclose(f);
+    xSemaphoreGive(s_state.lock);
     return ESP_OK;
 }
 
