@@ -259,13 +259,10 @@ static void _at_handle_lfs(const char *param)
         _at_report_storage_err("lfs read", err);
         return;
     }
-    if (need == 0) {
-        _at_report_storage_err("lfs read", ESP_FAIL);
-        return;
-    }
-    if ((need - 1U) > STORAGE_AT_MAX_READ_LEN) {
+    size_t payload_len = (need > 0U) ? (need - 1U) : 0U;
+    if (payload_len > STORAGE_AT_MAX_READ_LEN) {
         AT(Y "LFS[%u] muito grande (%u bytes). Limite AT=%u",
-           (unsigned)slot, (unsigned)(need - 1U), (unsigned)STORAGE_AT_MAX_READ_LEN);
+           (unsigned)slot, (unsigned)payload_len, (unsigned)STORAGE_AT_MAX_READ_LEN);
         return;
     }
 
@@ -304,10 +301,9 @@ static esp_err_t _register_at_commands(void)
 static esp_err_t _nvs_get_type_internal(nvs_handle_t h, uint16_t slot, esp_storage_nvs_type_t *out_type)
 {
     char k_type[8];
-    char k_int[8];
-    char k_str[8];
+    unsigned slot_u8 = (unsigned)(slot & 0xFFU);
     uint8_t type_u8 = 0;
-    _nvs_make_keys(slot, k_type, sizeof(k_type), k_int, sizeof(k_int), k_str, sizeof(k_str));
+    snprintf(k_type, sizeof(k_type), "s%03u_t", slot_u8);
 
     esp_err_t err = nvs_get_u8(h, k_type, &type_u8);
     if (err == ESP_ERR_NVS_NOT_FOUND) {
