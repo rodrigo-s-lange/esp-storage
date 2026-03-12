@@ -1,5 +1,8 @@
 # esp_storage - Examples
 
+Full C example file:
+- `examples/esp_storage_example_main.c`
+
 ## 1) Basic initialization
 
 ```c
@@ -81,4 +84,12 @@ AT+NVSS=2
 
 AT+LFS=10,{"key":"value"}
 AT+LFS=10
+```
+
+## 8) Recommended boot order
+
+```c
+nvs_flash_init();
+esp_at_init();
+esp_storage_init();
 ```

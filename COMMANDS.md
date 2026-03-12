@@ -8,6 +8,12 @@ Replace `<github-user>` with your GitHub username.
 idf.py add-dependency "<github-user>/esp_storage>=0.1.0"
 ```
 
+## Validate component in local project
+
+```bash
+cmd /c "call C:\esp\release-v6.0\esp-idf\export.bat && idf.py build"
+```
+
 ## First push
 
 ```bash
