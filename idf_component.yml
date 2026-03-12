@@ -1,0 +1,22 @@
+version: "0.1.0"
+
+description: >
+  Slot-based storage component for ESP-IDF projects.
+  Supports NVS slots (int/string) and LittleFS slots (blob/string/json).
+
+url: "https://github.com/rodrigo-s-lange/esp-storage"
+repository: "https://github.com/rodrigo-s-lange/esp-storage.git"
+
+license: "MIT"
+
+targets:
+  - esp32
+  - esp32c3
+  - esp32c6
+  - esp32s3
+
+dependencies:
+  idf:
+    version: ">=5.0.0"
+  joltwallet/littlefs:
+    version: ">=1.20.1"
