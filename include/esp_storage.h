@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -16,6 +17,7 @@ typedef enum {
     ESP_STORAGE_NVS_EMPTY  = 0,
     ESP_STORAGE_NVS_INT    = 1,
     ESP_STORAGE_NVS_STRING = 2,
+    ESP_STORAGE_NVS_NUMBER = 3,
 } esp_storage_nvs_type_t;
 
 /**
@@ -30,12 +32,17 @@ typedef enum {
  * - LittleFS base path: "/littlefs"
  * - LittleFS partition label: "storage"
  */
-esp_err_t esp_storage_init(void);
+esp_err_t esp_storage_init(bool log_enabled, bool at_enabled);
 
 /**
  * @brief Deinitialize storage subsystem and unmount LittleFS.
  */
 esp_err_t esp_storage_deinit(void);
+
+/**
+ * @brief Report whether storage subsystem is initialized.
+ */
+bool esp_storage_is_initialized(void);
 
 /**
  * @brief Set integer value to NVS slot [0..255].
@@ -46,6 +53,16 @@ esp_err_t esp_storage_nvs_set_int(uint16_t slot, int64_t value);
  * @brief Get integer value from NVS slot [0..255].
  */
 esp_err_t esp_storage_nvs_get_int(uint16_t slot, int64_t *out_value);
+
+/**
+ * @brief Set floating-point number value to NVS slot [0..255].
+ */
+esp_err_t esp_storage_nvs_set_number(uint16_t slot, double value);
+
+/**
+ * @brief Get floating-point number value from NVS slot [0..255].
+ */
+esp_err_t esp_storage_nvs_get_number(uint16_t slot, double *out_value);
 
 /**
  * @brief Set string value to NVS slot [0..255].
@@ -66,6 +83,14 @@ esp_err_t esp_storage_nvs_get_string(uint16_t slot, char *out, size_t out_len, s
  * @brief Get NVS slot type.
  */
 esp_err_t esp_storage_nvs_get_type(uint16_t slot, esp_storage_nvs_type_t *out_type);
+
+/**
+ * @brief Check whether NVS slot contains active data.
+ *
+ * Active means the slot has a stored type marker, even if the stored integer is 0
+ * or the stored string is empty.
+ */
+esp_err_t esp_storage_nvs_is_active(uint16_t slot, bool *out_active);
 
 /**
  * @brief Erase NVS slot data.
@@ -93,6 +118,13 @@ esp_err_t esp_storage_lfs_read(uint16_t slot, void *out, size_t out_len, size_t 
  * @brief Get payload size of LittleFS slot [0..255].
  */
 esp_err_t esp_storage_lfs_get_size(uint16_t slot, size_t *out_size);
+
+/**
+ * @brief Check whether LittleFS slot contains active data.
+ *
+ * Active means the backing file exists, even if it is empty.
+ */
+esp_err_t esp_storage_lfs_is_active(uint16_t slot, bool *out_active);
 
 /**
  * @brief Erase LittleFS slot file.
