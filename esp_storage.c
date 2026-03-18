@@ -523,6 +523,10 @@ static esp_err_t _register_at_commands(void)
         if (err != ESP_OK) return err;
         s_slots_registered = true;
     }
+    err = esp_at_set_help_visible("AT+NVS", false);
+    if (err != ESP_OK) return err;
+    err = esp_at_set_help_visible("AT+LFS", false);
+    if (err != ESP_OK) return err;
 
     s_state.at_cmds_registered = true;
     return ESP_OK;
